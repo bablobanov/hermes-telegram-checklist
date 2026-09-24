@@ -1,13 +1,16 @@
 ---
 name: telegram-checklist
-description: "Create/read/append/toggle/rebuild a native Telegram To-Do list (a real checklist with tappable checkboxes and a progress counter) in allowlisted chats or forum topics via a Telethon user session. Use when the user asks for a Telegram task list, a checklist with checkboxes, a To-Do list, to collect tasks or ideas from a chat/topic into a checklist, or to tick/add/rebuild list items. Supports a research contract: the agent collects candidate tasks from real chat messages into plan.json and the script validates it (allowlisted target, source links present in task texts, duplicates rejected, limits) before anything is sent. This is NOT markdown and NOT an internal todo - it is a real interactive Telegram object. The Bot API cannot post checklists into groups or topics (business-account private chats only), hence a Telethon user session. This is a WRITE skill: act only on an explicit user request, only into allowlisted chats, and always plan/dry-run before the real write."
-version: 1.0.0
+description: "Native Telegram To-Do checklists: create, append, toggle."
+version: 1.1.0
+author: Ilya Balobanov (bablobanov), Hermes Agent
+license: MIT
+platforms: [linux, macos, windows]
 metadata:
   hermes:
     tags: [telegram, checklist, todo, telethon, mtproto, write, research]
     category: communication
+    related_skills: []
 ---
-
 # Telegram Checklist (native To-Do lists via Telethon)
 
 Create and maintain native Telegram checklist objects (checkboxes, progress counter, shared completion) from a Telethon user session. The Bot API `sendChecklist` works only on behalf of a business account into its private chats with customers - a bot cannot post a checklist into a group or forum topic. MTProto under a user session can, which is what this skill does. Creating a checklist requires Telegram Premium on the acting account; reading or completing one does not. Keep this skill separate from any read-only Telethon reader.
@@ -95,6 +98,8 @@ For any potentially useful message with an attachment, analyze the content with 
 
 ## Task quality
 Every checklist item must be: plain language, result-oriented (an outcome, not a pile of technical details), self-contained (understandable without the neighboring items), within Telegram limits (30 tasks, title 255, task 200 - measured in UTF-16 code units, emoji count as 2), free of secrets and personal data, and - when built from a chat - carrying at least one direct source link in the text.
+
+**Runtime fallback for large sourced lists:** appConfig may advertise 30 items, yet `messages.sendMedia` can still reject a 30-item checklist with `TODO_ITEMS_TOO_MUCH` when the items are long and source-linked. A failed request with no `message_id` created nothing. Rebuild the plan as batches of at most 20 items and shorten each item to about 130 UTF-16 units; validate/dry-run again, create the first batch as a live test, then create the rest only after the first is verified. Do not retry the same rejected 30-item payload.
 
 Bad: `Handle the integration thing from the chat`
 Good: `Compare the three CRM offers from the pricing thread and pick one: https://t.me/c/123/45/678`
