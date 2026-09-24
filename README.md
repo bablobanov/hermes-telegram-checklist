@@ -1,6 +1,6 @@
 # hermes-telegram-checklist
 
-**Native Telegram checklists (To-Do lists) for AI agents** - create, read, append and toggle real interactive checklist messages in chats and forum topics through a Telethon user session.
+**Native Telegram checklists (To-Do lists) for [Hermes Agent](https://github.com/NousResearch/hermes-agent)** - create, read, append and toggle real interactive checklist messages in chats and forum topics through a Telethon user session.
 
 [![CI](https://github.com/bablobanov/hermes-telegram-checklist/actions/workflows/ci.yml/badge.svg)](https://github.com/bablobanov/hermes-telegram-checklist/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
@@ -19,7 +19,7 @@ A single-file Python CLI that manages **native Telegram To-Do lists** - the real
 - **rebuild** a list through a documented roll-over workflow
 - validate an agent-researched **plan** (`plan.json`) offline before anything is written
 
-It ships as a skill for the [Hermes agent](https://nousresearch.com) by [Nous Research](https://github.com/NousResearch), with a [`SKILL.md`](SKILL.md) that drives the agent, but the script has no framework dependencies: one file, stdlib + Telethon, strict JSON in/out - any agent harness or plain shell can use it.
+It ships as a skill for [Hermes Agent](https://github.com/NousResearch/hermes-agent) by [Nous Research](https://nousresearch.com), with a [`SKILL.md`](SKILL.md) that drives the agent, but the script has no framework dependencies: one file, stdlib + Telethon, strict JSON in/out - any agent harness or plain shell can use it.
 
 ## Why it exists: the Bot API can't do this
 
