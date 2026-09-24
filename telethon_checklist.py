@@ -103,7 +103,7 @@ MAX_TASKS = 30
 MAX_TITLE = 255
 MAX_TASK = 200
 
-PLAN_MEDIA = {"text", "photo", "document", "video", "audio", "voice", "webpage"}
+PLAN_MEDIA = {"text", "photo", "document", "video", "audio", "voice", "webpage", "rich_media"}
 
 
 class ChecklistError(Exception):

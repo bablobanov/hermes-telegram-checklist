@@ -914,6 +914,21 @@ class TestCreateDryRun(Base):
         self.assertEqual(code, 0)
         self.assertEqual(out["would_send"]["chat"], "me")
 
+    def test_dry_run_preserves_shared_flags_without_network(self):
+        code, out = run_json(
+            "create", "--title", "Team", "--task", "a",
+            "--chat", str(CHAT), "--thread", str(TOPIC),
+            "--others-append", "--others-complete", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertTrue(out["ok"])
+        self.assertTrue(out["dry_run"])
+        self.assertEqual(out["would_send"]["chat"], CHAT)
+        self.assertEqual(out["would_send"]["thread"], TOPIC)
+        self.assertTrue(out["would_send"]["others_can_append"])
+        self.assertTrue(out["would_send"]["others_can_complete"])
+        self.assertEqual(FakeClient.created, 0)
+        self.assertEqual(self.requests(), [])
+
 
 class TestCreateFromPlan(Base):
     def test_sends_exactly_plan_and_verifies_clean(self):
