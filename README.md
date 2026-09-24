@@ -2,7 +2,7 @@
 
 **Native Telegram checklists (To-Do lists) for AI agents** - create, read, append and toggle real interactive checklist messages in chats and forum topics through a Telethon user session.
 
-[![CI](https://github.com/johnsje183/hermes-telegram-checklist/actions/workflows/ci.yml/badge.svg)](https://github.com/johnsje183/hermes-telegram-checklist/actions/workflows/ci.yml)
+[![CI](https://github.com/bablobanov/hermes-telegram-checklist/actions/workflows/ci.yml/badge.svg)](https://github.com/bablobanov/hermes-telegram-checklist/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)
 ![Hermes skill](https://img.shields.io/badge/Hermes-skill-8A2BE2.svg)
@@ -184,7 +184,7 @@ Rebuild / roll-over: native To-Do items are **not text-editable** after creation
 One-line install with the [skills.sh](https://skills.sh) CLI (Claude Code and other Agent-Skills-compatible agents):
 
 ```bash
-npx skills add johnsje183/hermes-telegram-checklist
+npx skills add bablobanov/hermes-telegram-checklist
 ```
 
 Or drop the folder into your agent's skills directory (for Hermes: a folder like `skills/telegram-checklist/` containing `SKILL.md` and `telethon_checklist.py`). [`SKILL.md`](SKILL.md) is the agent-facing contract: trigger phrases ("make a Telegram checklist", "collect the tasks from this chat into a checklist", "tick item 2"), the two create modes (dictated vs researched), the plan.json research contract with per-task source evidence, semantic dedup rules, the roll-over workflow, and verification duties. The script is the enforcement layer: whatever the agent gets wrong, the CLI refuses fail-closed with an honest JSON error.
