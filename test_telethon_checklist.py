@@ -73,6 +73,10 @@ class GetForumTopicsRequest(_Simple):
     pass
 
 
+class GetForumTopicsByIDRequest(_Simple):
+    pass
+
+
 class RPCError(Exception):
     pass
 
@@ -141,6 +145,7 @@ _fmsg.SendMediaRequest = SendMediaRequest
 _fmsg.AppendTodoListRequest = AppendTodoListRequest
 _fmsg.ToggleTodoCompletedRequest = ToggleTodoCompletedRequest
 _fmsg.GetForumTopicsRequest = GetForumTopicsRequest
+_fmsg.GetForumTopicsByIDRequest = GetForumTopicsByIDRequest
 _ttypes = types.ModuleType("telethon.tl.types")
 for _cls in (InputMediaTodo, TodoList, TodoItem, TextWithEntities,
              InputReplyToMessage, MessageMediaToDo):
@@ -1135,6 +1140,33 @@ class TestGet(Base):
         self.assertEqual(code, 1)
         self.assertIn("not a checklist", out["error"])
 
+    def test_topic_restriction_blocks_foreign_topic(self):
+        # allowlist -100555:33 - a checklist living in topic 34 of that chat
+        # must be refused on READ exactly as on write (gates-inventory class)
+        os.environ["TELETHON_CHECKLIST_CHATS"] = "-100555:33"
+        FakeClient.script["get_messages"] = checklist_msg(items=("secret",), topic=34)
+        code, out = run_json("get", "--chat", "-100555", "--message-id", "7")
+        self.assertEqual(code, 1)
+        self.assertIn("outside the allowed topics", out["error"])
+        self.assertNotIn("secret", json.dumps(out))
+        self.assertNotIn("34", out["error"])  # the message's topic stays private
+
+    def test_topic_restriction_blocks_general_topic(self):
+        # a message outside any topic (General) is not topic 33 either
+        os.environ["TELETHON_CHECKLIST_CHATS"] = "-100555:33"
+        FakeClient.script["get_messages"] = checklist_msg(items=("secret",), topic=None)
+        code, out = run_json("get", "--chat", "-100555", "--message-id", "7")
+        self.assertEqual(code, 1)
+        self.assertIn("outside the allowed topics", out["error"])
+        self.assertNotIn("secret", json.dumps(out))
+
+    def test_topic_restriction_allows_matching_topic(self):
+        os.environ["TELETHON_CHECKLIST_CHATS"] = "-100555:33"
+        FakeClient.script["get_messages"] = checklist_msg(items=("a", "b"), topic=33)
+        code, out = run_json("get", "--chat", "-100555", "--message-id", "7")
+        self.assertEqual(code, 0)
+        self.assertEqual(out["total"], 2)
+
 
 class TestAppend(Base):
     def test_new_ids_continue_after_max(self):
@@ -1170,7 +1202,8 @@ class TestAppend(Base):
         code, out = run_json("append", "--chat", "-100555", "--message-id", "7",
                              "--task", "x")
         self.assertEqual(code, 1)
-        self.assertIn("allowed only for topics", out["error"])
+        self.assertIn("outside the allowed topics", out["error"])
+        self.assertNotIn("41", out["error"])  # the message's topic stays private
         self.assertEqual(self.requests(AppendTodoListRequest), [])
 
     def test_topic_restriction_allows_matching_topic(self):
@@ -1284,14 +1317,6 @@ class TestToggle(Base):
         self.assertEqual(code, 0)
         self.assertTrue(any("did not change" in w for w in out["warnings"]))
 
-    def test_topic_restriction_applies(self):
-        os.environ["TELETHON_CHECKLIST_CHATS"] = "-100555:33"
-        FakeClient.script["get_messages"] = checklist_msg(items=("a",), topic=41)
-        code, out = run_json("toggle", "--chat", "-100555", "--message-id", "7",
-                             "--done", "1")
-        self.assertEqual(code, 1)
-        self.assertIn("allowed only for topics", out["error"])
-
     def test_denied_chat_fails_before_network(self):
         code, out = run_json("toggle", "--chat", "-100999", "--message-id", "5",
                              "--done", "1")
@@ -1306,6 +1331,16 @@ class TestToggle(Base):
         self.assertEqual(code, 0)
         req = self.requests(ToggleTodoCompletedRequest)[0]
         self.assertEqual(req.completed, [1])
+
+    def test_topic_restriction_applies_without_naming_the_topic(self):
+        os.environ["TELETHON_CHECKLIST_CHATS"] = "-100555:33"
+        FakeClient.script["get_messages"] = checklist_msg(items=("a",), topic=41)
+        code, out = run_json("toggle", "--chat", "-100555", "--message-id", "7",
+                             "--done", "1")
+        self.assertEqual(code, 1)
+        self.assertIn("outside the allowed topics", out["error"])
+        self.assertNotIn("41", out["error"])
+        self.assertEqual(self.requests(ToggleTodoCompletedRequest), [])
 
 
 class TestListTopics(Base):
@@ -1348,6 +1383,47 @@ class TestListTopics(Base):
         code, out = run_json("list-topics", "--chat", str(CHAT))
         self.assertEqual(code, 0)
         self.assertTrue(any("first 100 of 135" in w for w in out["warnings"]))
+
+    def test_per_topic_allowlist_lists_only_allowed_topics_by_id(self):
+        os.environ["TELETHON_CHECKLIST_CHATS"] = "-100555:41,-100555:33"
+
+        def answer(req):
+            self.assertIsInstance(req, GetForumTopicsByIDRequest)
+            self.assertEqual(req.topics, [33, 41])
+            return _Simple(count=2, topics=[
+                _Simple(id=33, title="Ops", closed=False),
+                _Simple(id=41, title="Ideas", closed=True),
+            ])
+        FakeClient.script["request"] = answer
+        code, out = run_json("list-topics", "--chat", "-100555")
+        self.assertEqual(code, 0)
+        self.assertEqual([t["id"] for t in out["topics"]], [33, 41])
+        self.assertEqual(out["listed"], 2)
+        self.assertEqual(self.requests(GetForumTopicsRequest), [])  # never the full listing
+
+    def test_per_topic_allowlist_missing_topic_is_a_warning(self):
+        os.environ["TELETHON_CHECKLIST_CHATS"] = "-100555:33,-100555:41"
+        FakeClient.script["request"] = _Simple(count=2, topics=[
+            _Simple(id=33, title="Ops", closed=False),
+            _Simple(id=41),  # ForumTopicDeleted: id only, no title
+        ])
+        code, out = run_json("list-topics", "--chat", "-100555")
+        self.assertEqual(code, 0)
+        self.assertEqual([t["id"] for t in out["topics"]], [33])
+        self.assertTrue(any("41" in w and "not found" in w for w in out["warnings"]), out)
+        self.assertFalse(any("first" in w for w in out["warnings"]), out)  # no bogus partial-listing warning
+
+    def test_per_topic_allowlist_drops_unrequested_topics_from_the_answer(self):
+        # fail-closed: whatever the server answers, only allowlisted ids are printed
+        os.environ["TELETHON_CHECKLIST_CHATS"] = "-100555:33"
+        FakeClient.script["request"] = _Simple(count=2, topics=[
+            _Simple(id=33, title="Ops", closed=False),
+            _Simple(id=99, title="Leak", closed=False),
+        ])
+        code, out = run_json("list-topics", "--chat", "-100555")
+        self.assertEqual(code, 0)
+        self.assertEqual([t["id"] for t in out["topics"]], [33])
+        self.assertNotIn("Leak", json.dumps(out))
 
 
 class TestTransportSeams(Base):
@@ -1524,7 +1600,8 @@ class TestRealTelethonIntegration(unittest.TestCase):
             "except Exception:\n"
             "    print('SKIP'); sys.exit(0)\n"
             "from telethon.tl.functions.messages import (SendMediaRequest,\n"
-            "    AppendTodoListRequest, ToggleTodoCompletedRequest, GetForumTopicsRequest)\n"
+            "    AppendTodoListRequest, ToggleTodoCompletedRequest, GetForumTopicsRequest,\n"
+            "    GetForumTopicsByIDRequest)\n"
             "from telethon.tl.types import (InputMediaTodo, TodoList, TodoItem,\n"
             "    TextWithEntities, InputReplyToMessage, MessageMediaToDo)\n"
             "from telethon.errors import FloodWaitError, RPCError\n"
@@ -1538,6 +1615,7 @@ class TestRealTelethonIntegration(unittest.TestCase):
             "ToggleTodoCompletedRequest(peer='me', msg_id=1, completed=[1], incompleted=[])\n"
             "GetForumTopicsRequest(peer='me', offset_date=None, offset_id=0,\n"
             "                      offset_topic=0, limit=100)\n"
+            "GetForumTopicsByIDRequest(peer='me', topics=[33])\n"
             "assert issubclass(FloodWaitError, RPCError)\n"
             "print('OK')\n"
         )

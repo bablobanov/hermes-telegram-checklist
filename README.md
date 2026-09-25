@@ -31,7 +31,7 @@ The Telegram Bot API does have [`sendChecklist`](https://core.telegram.org/bots/
 - `get` - read any checklist message as JSON: tasks with ids, done state, sharing flags
 - `append` - add tasks to an existing list (with server-cap and id-overflow guards)
 - `toggle` - mark tasks done / not done in one call (`--done 2 --undone 1`)
-- `list-topics` - enumerate forum topics so the agent can pick the right thread
+- `list-topics` - enumerate forum topics so the agent can pick the right thread (only the allowed ones when the chat is allowlisted per-topic)
 - `plan` - fully offline validation of an agent-researched plan: allowlisted target, evidence links required inside task texts, duplicate detection, Telegram limits
 - roll-over workflow for "rebuild the list" requests (documented in [`SKILL.md`](SKILL.md))
 - on-demand CLI only: no daemon, no background listener, no message scraping
@@ -84,7 +84,7 @@ The checklist appears in Telegram as a real interactive card: checkboxes tick on
    | `TELETHON_API_ID` | yes | numeric API id |
    | `TELETHON_API_HASH` | yes | API hash |
    | `TELETHON_SESSION` | no | path to the session file; default `~/.hermes/telethon/user.session` |
-   | `TELETHON_CHECKLIST_CHATS` | no | write allowlist beyond Saved Messages (see below) |
+   | `TELETHON_CHECKLIST_CHATS` | no | chat / topic allowlist beyond Saved Messages, enforced on every command (see below) |
    | `HERMES_HOME` | no | overrides `~/.hermes` |
 
 4. One-time interactive login to create the session file (the skill itself is strictly non-interactive and will refuse cleanly if the session is not authorized):
@@ -108,7 +108,7 @@ The checklist appears in Telegram as a real interactive card: checkboxes tick on
    asyncio.run(main())
    ```
 
-5. Allowlist the chats the skill may write to. Saved Messages (`me`) is always allowed; everything else must be listed explicitly:
+5. Allowlist the chats the skill may touch - reads and writes alike. Saved Messages (`me`) is always allowed; everything else must be listed explicitly:
 
    ```bash
    # whole chat -1001234567890, plus chat -1009876543210 restricted to forum topic 33 only
@@ -191,7 +191,7 @@ Or drop the folder into your agent's skills directory (for Hermes: a folder like
 
 ## Security and responsible use
 
-- **Write allowlist.** The script refuses any target outside Saved Messages plus `TELETHON_CHECKLIST_CHATS` - including a wrong topic when a chat is allowlisted per-topic. The check runs offline, before any network or credentials are touched.
+- **Allowlist on every command.** The script refuses any target outside Saved Messages plus `TELETHON_CHECKLIST_CHATS`. The chat check runs offline, before any network or credentials are touched. A per-topic entry (`-100...:33`) is enforced on reads as well as writes: `get`, `append` and `toggle` refuse a checklist that lives outside the allowed topics (the refusal does not name the topic it is actually in), and `list-topics` fetches only the allowed topics by id - the chat's other topics are never requested. Before 1.1.1, `get` and `list-topics` checked only the chat.
 - **Checklist-only.** The only write requests it can send are checklist ones (`SendMedia` with a To-Do payload, `AppendTodoList`, `ToggleTodoCompleted`). No general messaging, no DMs, no invites, no scraping.
 - **No secrets in files.** Credentials come from the environment or `~/.hermes/.env` at runtime; nothing is echoed back. The bundled [`.gitignore`](.gitignore) keeps sessions and env files out of git.
 - **Session hygiene.** The session file is chmod-tightened to `0600` (best effort, POSIX).
@@ -210,7 +210,7 @@ Telethon >= 1.44 ships the MTProto To-Do types. The script builds `TodoList` / `
 - **On-demand only** - no background listener; the skill acts only when invoked
 - **No delete and no text edits** - Telegram does not allow editing To-Do item texts; rebuilds go through the roll-over workflow, deleting an old message stays manual
 - **Telegram caps** - 30 tasks per list, 255 UTF-16 units per title, 200 per task
-- **Forum topic listing** - `list-topics` returns the first 100 topics (a warning tells you when there are more); the server's `total` count may differ by one from the listed number (Telegram tends not to count the General topic)
+- **Forum topic listing** - `list-topics` returns the first 100 topics (a warning tells you when there are more); the server's `total` count may differ by one from the listed number (Telegram tends not to count the General topic). For a per-topic allowlisted chat it lists only the allowed topics, with a warning for any allowed id the chat does not have
 - Groups and channels only (negative ids); user-to-user peers are deliberately out of scope
 
 ## Contributing

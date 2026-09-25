@@ -13,8 +13,10 @@ Checklist operations only, never general messaging. Targets are limited to an
 allowlist: Saved Messages ('me') is always allowed, plus entries from
 TELETHON_CHECKLIST_CHATS (comma-separated), read from the environment or from
 ~/.hermes/.env. An entry is either '-100123' (the whole chat) or '-100123:33'
-(that chat restricted to forum topic 33 only). Anything else is refused before
-anything is written to Telegram.
+(that chat restricted to forum topic 33 only). The allowlist gates every
+command, reads included: 'get' refuses a checklist that lives outside the
+allowed topics, and 'list-topics' fetches only the allowed topics by id.
+Anything else is refused before anything is written to Telegram.
 
 Two ways to create a list:
   * direct:    create --title ... --task ... (the user dictated the tasks)
@@ -73,7 +75,7 @@ try:
     from telethon.errors import FloodWaitError, RPCError
     from telethon.tl.functions.messages import (
         SendMediaRequest, AppendTodoListRequest, ToggleTodoCompletedRequest,
-        GetForumTopicsRequest,
+        GetForumTopicsRequest, GetForumTopicsByIDRequest,
     )
     from telethon.tl.types import (
         InputMediaTodo, TodoList, TodoItem, TextWithEntities, InputReplyToMessage,
@@ -245,6 +247,21 @@ def _msg_topic_id(msg):
     if r is None or not getattr(r, "forum_topic", False):
         return None
     return getattr(r, "reply_to_top_id", None) or getattr(r, "reply_to_msg_id", None)
+
+
+def _check_msg_thread(target, msg, msg_id, allowed):
+    """Topic gate for an already-fetched message (get / append / toggle).
+
+    Unlike _check_thread (where the thread comes from the caller's own
+    arguments), the topic here was learned from the server - so the refusal
+    must not name it: under a per-topic allowlist a probe by message id would
+    otherwise map the chat's messages to topics one refusal at a time."""
+    threads = allowed.get(target)
+    if threads is None:
+        return
+    topic = _msg_topic_id(msg)
+    if topic is None or int(topic) not in threads:
+        _die(f"message {int(msg_id)} is outside the allowed topics of chat {target}")
 
 
 def build_link(chat_id, topic_id, message_id):
@@ -670,9 +687,13 @@ async def cmd_get(client, args):
     target = _check_chat(args.chat, allowed)
     entity = await _entity(client, target)
     try:
-        todo, tasks, _msg = await _read_checklist(client, entity, args.message_id)
+        todo, tasks, msg = await _read_checklist(client, entity, args.message_id)
     except ChecklistError as e:
         _die(str(e))
+    # a per-topic allowlist entry gates READS too: the topic of a message is
+    # known only after fetching it, so the check sits right after the read and
+    # before anything from the checklist is printed (same order as append/toggle)
+    _check_msg_thread(target, msg, args.message_id, allowed)
     print(json.dumps({
         "ok": True, "kind": "checklist-get", "chat": target,
         "message_id": int(args.message_id), "title": todo.title.text,
@@ -696,7 +717,7 @@ async def cmd_append(client, args):
         _todo, tasks, msg = await _read_checklist(client, entity, args.message_id)
     except ChecklistError as e:
         _die(str(e))
-    _check_thread(target, _msg_topic_id(msg), allowed)
+    _check_msg_thread(target, msg, args.message_id, allowed)
     if len(tasks) + len(new) > MAX_TASKS:
         _die(f"would exceed Telegram limit {MAX_TASKS} tasks")
     max_id = max([t["id"] for t in tasks], default=0)
@@ -742,7 +763,7 @@ async def cmd_toggle(client, args):
         _todo, tasks, msg = await _read_checklist(client, entity, args.message_id)
     except ChecklistError as e:
         _die(str(e))
-    _check_thread(target, _msg_topic_id(msg), allowed)
+    _check_msg_thread(target, msg, args.message_id, allowed)
     ids = {t["id"] for t in tasks}
     bad = [x for x in done + undone if x not in ids]
     if bad:
@@ -783,12 +804,24 @@ async def cmd_list_topics(client, args):
     if target == "me":
         _die("'me' has no forum topics - pass a forum chat id from TELETHON_CHECKLIST_CHATS")
     entity = await client.get_entity(target)
-    res = await client(GetForumTopicsRequest(
-        peer=entity, offset_date=None, offset_id=0, offset_topic=0, limit=100))
+    threads = allowed.get(target)
+    if threads is None:
+        res = await client(GetForumTopicsRequest(
+            peer=entity, offset_date=None, offset_id=0, offset_topic=0, limit=100))
+    else:
+        # per-topic allowlist: ask the server for exactly the allowed ids - the
+        # chat's other topics are never fetched, not merely filtered out
+        res = await client(GetForumTopicsByIDRequest(peer=entity, topics=sorted(threads)))
     topics = [{"id": t.id, "title": t.title, "closed": bool(getattr(t, "closed", False))}
-              for t in getattr(res, "topics", []) if hasattr(t, "title")]
+              for t in getattr(res, "topics", [])
+              if hasattr(t, "title") and (threads is None or t.id in threads)]  # fail-closed
     total = getattr(res, "count", None)
-    if isinstance(total, int) and total > len(topics):
+    if threads is not None:
+        # a deleted / never-existing allowed id comes back as ForumTopicDeleted (no title)
+        missing = sorted(threads - {t["id"] for t in topics})
+        if missing:
+            warnings = warnings + [f"allowed topics {missing} not found in chat {target}"]
+    elif isinstance(total, int) and total > len(topics):
         warnings = warnings + [f"listed the first {len(topics)} of {total} topics - "
                                "the rest are not shown"]
     print(json.dumps({
