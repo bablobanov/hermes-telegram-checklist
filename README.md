@@ -215,7 +215,7 @@ Telethon >= 1.44 ships the MTProto To-Do types. The script builds `TodoList` / `
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The offline test suite (143 tests, no network, no Telethon required) runs with `python3 test_telethon_checklist.py`; a copy-paste live smoke against Saved Messages lives in [examples/quickstart.md](examples/quickstart.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). The offline test suite (150 tests, no network, no Telethon required) runs with `python3 test_telethon_checklist.py`; a copy-paste live smoke against Saved Messages lives in [examples/quickstart.md](examples/quickstart.md).
 
 ## License
 
