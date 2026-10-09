@@ -17,7 +17,7 @@ The offline suite needs no network, no credentials, and not even Telethon (a stu
 python3 test_telethon_checklist.py
 ```
 
-All 143 tests must pass with empty stderr. With `telethon>=1.44` installed, the integration test also verifies the exact MTProto request signatures.
+All 150 tests must pass with empty stderr. With `telethon>=1.44` installed, the integration test also verifies the exact MTProto request signatures.
 
 Lint (the CI gate uses the critical rule set only):
 
